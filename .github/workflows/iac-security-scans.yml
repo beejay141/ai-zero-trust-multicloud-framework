@@ -1,0 +1,119 @@
+name: IaC Security Scans
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TF_ROOT: terraform
+
+jobs:
+  checkov:
+    name: Checkov Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov
+        run: |
+          mkdir -p reports/checkov
+          checkov \
+            -d "$TF_ROOT" \
+            --framework terraform \
+            --output cli \
+            --output json \
+            --output-file-path console,reports/checkov/checkov-report.json
+
+      - name: Upload Checkov report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: reports/checkov/checkov-report.json
+
+  kics:
+    name: KICS Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install KICS
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL https://github.com/Checkmarx/kics/releases/download/v2.1.10/kics_Linux_x64.tar.gz \
+            | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run KICS
+        run: |
+          mkdir -p reports/kics
+          "$HOME/.local/bin/kics" scan \
+            --path "$TF_ROOT" \
+            --output-path reports/kics \
+            --report-formats json \
+            --no-progress
+
+      - name: Upload KICS report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kics-report
+          path: reports/kics
+
+  regula_opa:
+    name: Regula OPA Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install OPA
+        run: |
+          curl -sSL -o /tmp/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          install /tmp/opa /usr/local/bin/opa
+          opa version
+
+      - name: Install Regula
+        run: |
+          go install github.com/fugue/regula/v3/cmd/regula@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run Regula
+        run: |
+          mkdir -p reports/regula
+          "$(go env GOPATH)/bin/regula" run "$TF_ROOT" --format json > reports/regula/regula-report.json
+
+      - name: Upload Regula report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regula-report
+          path: reports/regula/regula-report.json
