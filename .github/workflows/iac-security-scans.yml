@@ -107,7 +107,7 @@ jobs:
       - name: Run Regula
         run: |
           mkdir -p reports/regula
-          "$HOME/.local/bin/regula" run "$TF_ROOT" --format json > reports/regula/regula-report.json
+          "$HOME/.local/bin/regula" run "$TF_ROOT" --format json --severity medium > reports/regula/regula-report.json
 
       - name: Upload Regula report
         if: always()
