@@ -61,21 +61,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install KICS
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL "https://github.com/Checkmarx/kics/releases/download/v${KICS_VERSION}/kics_${KICS_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz -C "$HOME/.local/bin"
-          chmod +x "$HOME/.local/bin/kics"
-          "$HOME/.local/bin/kics" version
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
       - name: Run KICS
         run: |
           mkdir -p reports/kics
-          "$HOME/.local/bin/kics" scan \
-            --path "$TF_ROOT" \
-            --output-path reports/kics \
+          docker run --rm \
+            -v "$PWD":/path \
+            checkmarx/kics:v${KICS_VERSION} scan \
+            --path /path/$TF_ROOT \
+            --output-path /path/reports/kics \
             --report-formats json \
             --no-progress
 
