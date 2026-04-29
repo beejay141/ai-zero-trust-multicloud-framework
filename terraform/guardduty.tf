@@ -1,4 +1,5 @@
 resource "aws_guardduty_detector" "main" {
+  #checkov:skip=CKV2_AWS_3:This reference repo provisions a standalone GuardDuty detector and does not model organization-wide GuardDuty administration.
   enable = true
 }
 

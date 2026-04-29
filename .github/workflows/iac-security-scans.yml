@@ -16,6 +16,8 @@ permissions:
 
 env:
   TF_ROOT: terraform
+  KICS_VERSION: 2.1.20
+  REGULA_VERSION: 3.2.1
 
 jobs:
   checkov:
@@ -62,8 +64,10 @@ jobs:
       - name: Install KICS
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -sSL https://github.com/Checkmarx/kics/releases/download/v2.1.10/kics_Linux_x64.tar.gz \
+          curl -fsSL "https://github.com/Checkmarx/kics/releases/download/v${KICS_VERSION}/kics_${KICS_VERSION}_linux_amd64.tar.gz" \
             | tar -xz -C "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/kics"
+          "$HOME/.local/bin/kics" version
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run KICS
@@ -90,11 +94,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-
       - name: Install OPA
         run: |
           curl -sSL -o /tmp/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
@@ -103,13 +102,17 @@ jobs:
 
       - name: Install Regula
         run: |
-          go install github.com/fugue/regula/v3/cmd/regula@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/fugue/regula/releases/download/v${REGULA_VERSION}/regula_${REGULA_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/regula"
+          "$HOME/.local/bin/regula" version
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run Regula
         run: |
           mkdir -p reports/regula
-          "$(go env GOPATH)/bin/regula" run "$TF_ROOT" --format json > reports/regula/regula-report.json
+          "$HOME/.local/bin/regula" run "$TF_ROOT" --format json > reports/regula/regula-report.json
 
       - name: Upload Regula report
         if: always()

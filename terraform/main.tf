@@ -70,6 +70,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "access_logs" {
+  #checkov:skip=CKV_AWS_144:Cross-region replication is intentionally excluded from this standalone reference implementation.
   bucket = local.access_log_bucket_name
 }
 
@@ -106,7 +107,7 @@ resource "aws_s3_bucket_ownership_controls" "access_logs_ownership" {
   bucket = aws_s3_bucket.access_logs.id
 
   rule {
-    object_ownership = "BucketOwnerPreferred"
+    object_ownership = "BucketOwnerEnforced"
   }
 }
 
@@ -124,7 +125,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "access_logs_lifecycle" {
     noncurrent_version_expiration {
       noncurrent_days = 90
     }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
+}
+
+resource "aws_s3_bucket_notification" "access_logs_notifications" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  topic {
+    topic_arn = aws_sns_topic.cloudtrail_notifications.arn
+    events    = ["s3:ObjectCreated:*"]
+  }
+
+  depends_on = [aws_sns_topic_policy.cloudtrail_notifications]
 }
 
 resource "aws_s3_bucket_policy" "access_logs_policy" {
@@ -168,6 +184,7 @@ resource "aws_s3_bucket_policy" "access_logs_policy" {
 
 # Encrypted S3 bucket for security logs
 resource "aws_s3_bucket" "security_logs" {
+  #checkov:skip=CKV_AWS_144:Cross-region replication is intentionally excluded from this standalone reference implementation.
   bucket = var.security_log_bucket_name
 }
 
@@ -204,7 +221,7 @@ resource "aws_s3_bucket_ownership_controls" "security_logs_ownership" {
   bucket = aws_s3_bucket.security_logs.id
 
   rule {
-    object_ownership = "BucketOwnerPreferred"
+    object_ownership = "BucketOwnerEnforced"
   }
 }
 
@@ -230,7 +247,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "security_logs_lifecycle" {
     noncurrent_version_expiration {
       noncurrent_days = 90
     }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
+}
+
+resource "aws_s3_bucket_notification" "security_logs_notifications" {
+  bucket = aws_s3_bucket.security_logs.id
+
+  topic {
+    topic_arn = aws_sns_topic.cloudtrail_notifications.arn
+    events    = ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
+  }
+
+  depends_on = [aws_sns_topic_policy.cloudtrail_notifications]
 }
 
 resource "aws_s3_bucket_policy" "security_logs_policy" {

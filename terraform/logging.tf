@@ -4,6 +4,58 @@ resource "aws_cloudwatch_log_group" "cloudtrail" {
   kms_key_id        = aws_kms_key.security_controls.arn
 }
 
+resource "aws_sns_topic" "cloudtrail_notifications" {
+  name              = "zero-trust-cloudtrail-notifications"
+  kms_master_key_id = aws_kms_key.security_controls.arn
+}
+
+resource "aws_sns_topic_policy" "cloudtrail_notifications" {
+  arn = aws_sns_topic.cloudtrail_notifications.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudTrailPublish"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.cloudtrail_notifications.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
+          }
+        }
+      },
+      {
+        Sid    = "AllowS3Notifications"
+        Effect = "Allow"
+        Principal = {
+          Service = "s3.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.cloudtrail_notifications.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = [
+              aws_s3_bucket.access_logs.arn,
+              aws_s3_bucket.security_logs.arn
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role" "cloudtrail_cloudwatch" {
   name = "zeroTrustCloudTrailCloudWatchRole"
 
@@ -44,6 +96,7 @@ resource "aws_iam_role_policy" "cloudtrail_cloudwatch" {
 resource "aws_cloudtrail" "audit" {
   name                          = "zero-trust-security-trail"
   s3_bucket_name                = aws_s3_bucket.security_logs.id
+  sns_topic_name                = aws_sns_topic.cloudtrail_notifications.name
   include_global_service_events = true
   is_multi_region_trail         = true
   enable_logging                = true
@@ -54,7 +107,8 @@ resource "aws_cloudtrail" "audit" {
 
   depends_on = [
     aws_s3_bucket_policy.security_logs_policy,
-    aws_iam_role_policy.cloudtrail_cloudwatch
+    aws_iam_role_policy.cloudtrail_cloudwatch,
+    aws_sns_topic_policy.cloudtrail_notifications
   ]
 
   event_selector {
