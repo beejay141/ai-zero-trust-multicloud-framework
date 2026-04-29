@@ -18,6 +18,7 @@ env:
   TF_ROOT: terraform
   KICS_VERSION: 2.1.20
   REGULA_VERSION: 3.2.1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   checkov:
@@ -70,6 +71,7 @@ jobs:
             --path /path/$TF_ROOT \
             --output-path /path/reports/kics \
             --report-formats json \
+            --fail-on medium,high,critical \
             --no-progress
 
       - name: Upload KICS report
