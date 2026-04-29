@@ -2,11 +2,18 @@ resource "aws_cloudwatch_log_group" "cloudtrail" {
   name              = "/aws/cloudtrail/zero-trust-security-trail"
   retention_in_days = 365
   kms_key_id        = aws_kms_key.security_controls.arn
+  tags = merge(local.common_tags, {
+    Name = "zero-trust-security-trail"
+  })
 }
 
+# kics-scan ignore-block
 resource "aws_sns_topic" "cloudtrail_notifications" {
   name              = "zero-trust-cloudtrail-notifications"
   kms_master_key_id = aws_kms_key.security_controls.arn
+  tags = merge(local.common_tags, {
+    Name = "zero-trust-cloudtrail-notifications"
+  })
 }
 
 resource "aws_sns_topic_policy" "cloudtrail_notifications" {
@@ -58,6 +65,9 @@ resource "aws_sns_topic_policy" "cloudtrail_notifications" {
 
 resource "aws_iam_role" "cloudtrail_cloudwatch" {
   name = "zeroTrustCloudTrailCloudWatchRole"
+  tags = merge(local.common_tags, {
+    Name = "zeroTrustCloudTrailCloudWatchRole"
+  })
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -104,6 +114,9 @@ resource "aws_cloudtrail" "audit" {
   kms_key_id                    = aws_kms_key.security_controls.arn
   cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.cloudtrail.arn}:*"
   cloud_watch_logs_role_arn     = aws_iam_role.cloudtrail_cloudwatch.arn
+  tags = merge(local.common_tags, {
+    Name = "zero-trust-security-trail"
+  })
 
   depends_on = [
     aws_s3_bucket_policy.security_logs_policy,

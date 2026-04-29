@@ -1,6 +1,9 @@
 # AWS Config for continuous compliance monitoring
 resource "aws_iam_role" "config_role" {
   name = "zeroTrustAWSConfigRole"
+  tags = merge(local.common_tags, {
+    Name = "zeroTrustAWSConfigRole"
+  })
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

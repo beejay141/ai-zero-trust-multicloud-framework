@@ -11,12 +11,21 @@ data "aws_caller_identity" "current" {}
 
 locals {
   access_log_bucket_name = "${var.security_log_bucket_name}-access"
+  common_tags = {
+    Project         = "ai-zero-trust-multicloud-framework"
+    Environment     = "security"
+    ManagedBy       = "terraform"
+    SecurityControl = "zero-trust"
+  }
 }
 
 resource "aws_kms_key" "security_controls" {
   description             = "KMS key for Zero Trust logging and compliance controls"
   deletion_window_in_days = 30
   enable_key_rotation     = true
+  tags = merge(local.common_tags, {
+    Name = "zero-trust-security-controls"
+  })
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -65,6 +74,15 @@ resource "aws_kms_alias" "security_controls" {
   target_key_id = aws_kms_key.security_controls.key_id
 }
 
+resource "aws_accessanalyzer_analyzer" "account" {
+  analyzer_name = "zero-trust-account-analyzer"
+  type          = "ACCOUNT"
+
+  tags = merge(local.common_tags, {
+    Name = "zero-trust-account-analyzer"
+  })
+}
+
 provider "aws" {
   region = var.aws_region
 }
@@ -72,6 +90,9 @@ provider "aws" {
 resource "aws_s3_bucket" "access_logs" {
   #checkov:skip=CKV_AWS_144:Cross-region replication is intentionally excluded from this standalone reference implementation.
   bucket = local.access_log_bucket_name
+  tags = merge(local.common_tags, {
+    Name = local.access_log_bucket_name
+  })
 }
 
 resource "aws_s3_bucket_versioning" "access_logs_versioning" {
@@ -146,46 +167,51 @@ resource "aws_s3_bucket_notification" "access_logs_notifications" {
 resource "aws_s3_bucket_policy" "access_logs_policy" {
   bucket = aws_s3_bucket.access_logs.id
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.access_logs.arn,
-          "${aws_s3_bucket.access_logs.arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      },
-      {
-        Sid    = "AllowS3AccessLogs"
-        Effect = "Allow"
-        Principal = {
-          Service = "logging.s3.amazonaws.com"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.access_logs.arn}/s3-access-logs/*"
-        Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "${aws_s3_bucket.access_logs.arn}",
+        "${aws_s3_bucket.access_logs.arn}/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
         }
       }
-    ]
-  })
+    },
+    {
+      "Sid": "AllowS3AccessLogs",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "logging.s3.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "${aws_s3_bucket.access_logs.arn}/s3-access-logs/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "${data.aws_caller_identity.current.account_id}"
+        }
+      }
+    }
+  ]
+}
+POLICY
 }
 
 # Encrypted S3 bucket for security logs
 resource "aws_s3_bucket" "security_logs" {
   #checkov:skip=CKV_AWS_144:Cross-region replication is intentionally excluded from this standalone reference implementation.
   bucket = var.security_log_bucket_name
+  tags = merge(local.common_tags, {
+    Name = var.security_log_bucket_name
+  })
 }
 
 resource "aws_s3_bucket_versioning" "security_logs_versioning" {
@@ -268,85 +294,90 @@ resource "aws_s3_bucket_notification" "security_logs_notifications" {
 resource "aws_s3_bucket_policy" "security_logs_policy" {
   bucket = aws_s3_bucket.security_logs.id
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.security_logs.arn,
-          "${aws_s3_bucket.security_logs.arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      },
-      {
-        Sid    = "AllowCloudTrailAclCheck"
-        Effect = "Allow"
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        }
-        Action   = "s3:GetBucketAcl"
-        Resource = aws_s3_bucket.security_logs.arn
-        Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
-        }
-      },
-      {
-        Sid    = "AllowCloudTrailWrite"
-        Effect = "Allow"
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.security_logs.arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
-        Condition = {
-          StringEquals = {
-            "s3:x-amz-acl"      = "bucket-owner-full-control"
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
-          ArnLike = {
-            "aws:SourceArn" = "arn:aws:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
-          }
-        }
-      },
-      {
-        Sid    = "AllowConfigWrite"
-        Effect = "Allow"
-        Principal = {
-          Service = "config.amazonaws.com"
-        }
-        Action   = ["s3:GetBucketAcl", "s3:ListBucket"]
-        Resource = aws_s3_bucket.security_logs.arn
-        Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
-        }
-      },
-      {
-        Sid    = "AllowConfigObjectWrite"
-        Effect = "Allow"
-        Principal = {
-          Service = "config.amazonaws.com"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.security_logs.arn}/config/*"
-        Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-            "s3:x-amz-acl"      = "bucket-owner-full-control"
-          }
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "${aws_s3_bucket.security_logs.arn}",
+        "${aws_s3_bucket.security_logs.arn}/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
         }
       }
-    ]
-  })
+    },
+    {
+      "Sid": "AllowCloudTrailAclCheck",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:GetBucketAcl",
+      "Resource": "${aws_s3_bucket.security_logs.arn}",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "${data.aws_caller_identity.current.account_id}"
+        }
+      }
+    },
+    {
+      "Sid": "AllowCloudTrailWrite",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "${aws_s3_bucket.security_logs.arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*",
+      "Condition": {
+        "StringEquals": {
+          "s3:x-amz-acl": "bucket-owner-full-control",
+          "aws:SourceAccount": "${data.aws_caller_identity.current.account_id}"
+        },
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
+        }
+      }
+    },
+    {
+      "Sid": "AllowConfigWrite",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "config.amazonaws.com"
+      },
+      "Action": [
+        "s3:GetBucketAcl",
+        "s3:ListBucket"
+      ],
+      "Resource": "${aws_s3_bucket.security_logs.arn}",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "${data.aws_caller_identity.current.account_id}"
+        }
+      }
+    },
+    {
+      "Sid": "AllowConfigObjectWrite",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "config.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "${aws_s3_bucket.security_logs.arn}/config/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "${data.aws_caller_identity.current.account_id}",
+          "s3:x-amz-acl": "bucket-owner-full-control"
+        }
+      }
+    }
+  ]
+}
+POLICY
 }

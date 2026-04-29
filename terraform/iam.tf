@@ -1,6 +1,9 @@
 resource "aws_iam_policy" "strict_policy" {
   name        = "zero-trust-strict-policy"
   description = "Least-privilege IAM policy for Zero Trust reference controls"
+  tags = merge(local.common_tags, {
+    Name = "zero-trust-strict-policy"
+  })
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -17,13 +20,17 @@ resource "aws_iam_policy" "strict_policy" {
         }
       },
       {
-        Sid      = "ReadWriteSecurityLogsObjects"
+        Sid      = "WriteSecurityLogsObjects"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject"]
+        Action   = ["s3:PutObject"]
         Resource = ["${aws_s3_bucket.security_logs.arn}/*"]
         Condition = {
           Bool = {
             "aws:SecureTransport" = "true"
+          }
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = aws_kms_key.security_controls.arn
           }
         }
       }
