@@ -18,7 +18,6 @@ env:
   TF_ROOT: terraform
   KICS_VERSION: 2.1.20
   REGULA_VERSION: 3.2.1
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   checkov:
@@ -27,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -49,7 +48,7 @@ jobs:
 
       - name: Upload Checkov report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: checkov-report
           path: reports/checkov/checkov-report.json
@@ -60,7 +59,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run KICS
         run: |
@@ -76,7 +75,7 @@ jobs:
 
       - name: Upload KICS report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: kics-report
           path: reports/kics
@@ -87,7 +86,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install OPA
         run: |
@@ -118,7 +117,7 @@ jobs:
 
       - name: Upload Regula report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: regula-report
           path: reports/regula/regula-report.json
